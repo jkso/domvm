@@ -8,6 +8,7 @@
 | [server][6] | 15.9k / 6.4k | `mini`<br> + `html`<br>                                                                                                                                                                                    | SSR rendering                                                                                                                                        |
 | [full][7]   | 16.5k / 6.5k | `mini`<br> + `attach`<br> + `html`<br>                                                                                                                                                                     | everything (for tests)                                                                                                                               |
 | [dev][8]    | 21.7k / 8.5k | `full`<br> + warnings<br>                                                                                                                                                                                  | use this build for development; it contains detection of some<br>anti-patterns that may cause slowness, confusion, errors or<br>undesirable behavior |
+| [ssr][9]    | 2.5k / 1.3k  | ssr                                                                                                                                                                                                        |                                                                                                                                                      |
 
 [1]: https://github.com/leeoniya/domvm/blob/3.x-dev/dist/pico/domvm.pico.min.js
 [2]: https://github.com/leeoniya/domvm/blob/3.x-dev/dist/nano/domvm.nano.min.js
@@ -17,3 +18,4 @@
 [6]: https://github.com/leeoniya/domvm/blob/3.x-dev/dist/server/domvm.server.min.js
 [7]: https://github.com/leeoniya/domvm/blob/3.x-dev/dist/full/domvm.full.min.js
 [8]: https://github.com/leeoniya/domvm/blob/3.x-dev/dist/dev/domvm.dev.min.js
+[9]: https://github.com/leeoniya/domvm/blob/3.x-dev/dist/ssr/domvm.ssr.min.js

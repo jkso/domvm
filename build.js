@@ -55,7 +55,13 @@ function getBuilds(name) {
 			contents: "`full`<br> + warnings<br>",
 			descr: "use this build for development; it contains detection of some<br>anti-patterns that may cause slowness, confusion, errors or<br>undesirable behavior",
 			feats: ["CSSTAG","AUTOPX","EMIT","STREAM"],
-		}
+		},
+		{
+			build: "ssr",
+			contents: "ssr",
+			descr: "",
+			feats: ["CSSTAG","AUTOPX"],
+		},
 	].filter(b => name != null ? b.build === name : true);
 }
 

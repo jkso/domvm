@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+	<title>ssr test</title>
+</head>
+<body>
+	<script src="../dist/ssr/domvm.ssr.js"></script>
+	<div id="root"></div>
+	<script>
+		var el = domvm.defineElement;
+
+		function View1(vm, data) {
+			var x = 0;
+
+			var hooks = {
+				willRemove: node => {
+					console.log("willRemove", node);
+
+					if (++x < 10)
+						return new Promise((resolve, reject) => setTimeout(resolve, 100));
+				}
+			};
+
+			return () =>
+				el("ul.moo", {class: "cow"}, data.map((word, i) =>
+					el("li", {_hooks: hooks}, [
+						word,
+						" ",
+						i,
+					//	el("span", {moo: '">'}, ">"),
+					])
+				))
+		}
+
+		var data = ["foo"];
+
+		var html = domvm.createView(View1, data);
+
+		console.log(html);
+	</script>
+</body>
+</html>
