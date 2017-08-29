@@ -748,7 +748,7 @@ function _removeChild(parEl, el, immediate) {
 
 // todo: should delay parent unmount() by returning res prom?
 function removeChild(parEl, el) {
-	var node = el._node, hooks = node.hooks;
+	var node = el._node;
 
 	// already marked for removal
 	if (node._dead) { return; }
@@ -1523,8 +1523,6 @@ function patchChildren(vnode, donor) {
 function DOMInstr(withTime) {
 	var isEdge = navigator.userAgent.indexOf("Edge") !== -1;
 	var isIE = navigator.userAgent.indexOf("Trident/") !== -1;
-	var isMS = isEdge || isIE;
-
 	var getDescr = Object.getOwnPropertyDescriptor;
 	var defProp = Object.defineProperty;
 
