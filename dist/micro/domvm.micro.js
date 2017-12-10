@@ -785,7 +785,7 @@ function insertBefore(parEl, el, refEl) {
 	var node = el._node, inDom = el.parentNode != null;
 
 	// el === refEl is asserted as a no-op insert called to fire hooks
-	var vm = (el === refEl || !inDom) && node.vm;
+	var vm = (el === refEl || !inDom) ? node.vm : null;
 
 	if (vm != null)
 		{ fireHook(vm.hooks, "willMount", vm, vm.data); }
@@ -1029,6 +1029,10 @@ function hydrate(vnode, withEl) {
 	return vnode.el;
 }
 
+// prevent GCC from inlining some large funcs (which negatively affects Chrome's JIT)
+//window.syncChildren = syncChildren;
+window.lisMove = lisMove;
+
 function nextNode(node, body) {
 	return body[node.idx + 1];
 }
@@ -1041,45 +1045,14 @@ function parentNode(node) {
 	return node.parent;
 }
 
-function tmpEdges(fn, parEl, lftSib, rgtSib) {
-	// get outer immute edges
-	var lftLft = prevSib(lftSib);
-	var rgtRgt = nextSib(rgtSib);
-
-	fn(lftLft, rgtRgt);
-
-	return {
-		lftSib: lftLft ? nextSib(lftLft) : parEl.firstChild,
-		rgtSib: rgtRgt ? prevSib(rgtRgt) : parEl.lastChild,
-	};
-}
-
-function headTailTry(parEl, lftSib, lftNode, rgtSib, rgtNode) {
-	var areAdjacent	= rgtNode.idx === lftNode.idx + 1;
-	var headToTail = areAdjacent ? false : lftSib._node === rgtNode;
-	var tailToHead = areAdjacent ? true  : rgtSib._node === lftNode;
-
-	if (headToTail || tailToHead) {
-		return tmpEdges(function(lftLft, rgtRgt) {
-			if (tailToHead)
-				{ insertBefore(parEl, rgtSib, lftSib); }
-
-			if (headToTail)
-				{ insertBefore(parEl, lftSib, rgtRgt); }
-		}, parEl, lftSib, rgtSib);
-	}
-
-	return null;
-}
-
 var BREAK = 1;
 var BREAK_ALL = 2;
 
-function syncDir(advSib, advNode, insert, sibName, nodeName) {
+function syncDir(advSib, advNode, insert, sibName, nodeName, invSibName, invNodeName, invInsert) {
 	return function(node, parEl, body, state, convTest, lis) {
 		var sibNode, tmpSib;
 
-		if (state[sibName]) {
+		if (state[sibName] != null) {
 			// skip dom elements not created by domvm
 			if ((sibNode = state[sibName]._node) == null) {
 				state[sibName] = advSib(state[sibName]);
@@ -1097,43 +1070,52 @@ function syncDir(advSib, advNode, insert, sibName, nodeName) {
 		if (state[nodeName] == convTest)
 			{ return BREAK_ALL; }
 		else if (state[nodeName].el == null) {
-			insert(parEl, hydrate(state[nodeName]), state[sibName]);
+			insert(parEl, hydrate(state[nodeName]), state[sibName]);	// should lis be updated here?
 			state[nodeName] = advNode(state[nodeName], body);		// also need to advance sib?
 		}
 		else if (state[nodeName].el === state[sibName]) {
 			state[nodeName] = advNode(state[nodeName], body);
 			state[sibName] = advSib(state[sibName]);
 		}
+		// head->tail or tail->head
+		else if (!lis && sibNode === state[invNodeName]) {
+			tmpSib = state[sibName];
+			state[sibName] = advSib(tmpSib);
+			invInsert(parEl, tmpSib, state[invSibName]);
+			state[invSibName] = tmpSib;
+		}
 		else {
-			if (lis && state[sibName]) {
-				if (sibNode._lis) {
-					insert(parEl, state[nodeName].el, state[sibName]);
-					state[nodeName] = advNode(state[nodeName], body);
-					return;
-				}
-
-				// find closest tomb
-				var t = binaryFindLarger(sibNode.idx, state.tombs);
-				sibNode._lis = true;
-				tmpSib = nextSib(state[sibName]);
-				insert(parEl, state[sibName], t != null ? body[state.tombs[t]].el : t);
-
-				if (t == null)
-					{ state.tombs.push(sibNode.idx); }
-				else
-					{ state.tombs.splice(t, 0, sibNode.idx); }
-
-				state[sibName] = tmpSib;
-				return;
-			}
+			if (lis && state[sibName] != null)
+				{ return lisMove(advSib, advNode, insert, sibName, nodeName, parEl, body, sibNode, state); }
 
 			return BREAK;
 		}
 	};
 }
 
-var syncLft = syncDir(nextSib, nextNode, insertBefore, "lftSib", "lftNode");
-var syncRgt = syncDir(prevSib, prevNode, insertAfter, "rgtSib", "rgtNode");
+function lisMove(advSib, advNode, insert, sibName, nodeName, parEl, body, sibNode, state) {
+	if (sibNode._lis) {
+		insert(parEl, state[nodeName].el, state[sibName]);
+		state[nodeName] = advNode(state[nodeName], body);
+	}
+	else {
+		// find closest tomb
+		var t = binaryFindLarger(sibNode.idx, state.tombs);
+		sibNode._lis = true;
+		var tmpSib = advSib(state[sibName]);
+		insert(parEl, state[sibName], t != null ? body[state.tombs[t]].el : t);
+
+		if (t == null)
+			{ state.tombs.push(sibNode.idx); }
+		else
+			{ state.tombs.splice(t, 0, sibNode.idx); }
+
+		state[sibName] = tmpSib;
+	}
+}
+
+var syncLft = syncDir(nextSib, nextNode, insertBefore, "lftSib", "lftNode", "rgtSib", "rgtNode", insertAfter);
+var syncRgt = syncDir(prevSib, prevNode, insertAfter, "rgtSib", "rgtNode", "lftSib", "lftNode", insertBefore);
 
 function syncChildren(node, donor) {
 	var obody	= donor.body,
@@ -1162,16 +1144,8 @@ function syncChildren(node, donor) {
 			if (r === BREAK_ALL) { break converge; }
 		}
 
-		var newSibs;
-
-		if (newSibs = headTailTry(parEl, state.lftSib, state.lftNode, state.rgtSib, state.rgtNode)) {
-			state.lftSib = newSibs.lftSib;
-			state.rgtSib = newSibs.rgtSib;
-		}
-		else {
-			sortDOM(node, parEl, body, state);
-			break;
-		}
+		sortDOM(node, parEl, body, state);
+		break;
 	}
 }
 
@@ -1366,6 +1340,7 @@ function patchChildren(vnode, donor) {
 					node2 = donor2;
 					node2.parent = vnode;
 					node2.idx = i;
+					node2._lis = false;
 				}
 				// diff returns new diffVals, so generate new vnode & patch
 				else
@@ -1404,8 +1379,8 @@ function patchChildren(vnode, donor) {
 			}
 			else if (type2 === VVIEW) {
 				if (donor2 = doFind && find(node2, obody, fromIdx)) {		// update/moveTo
-					var vm = donor2.vm._update(node2.data, vnode, i);		// withDOM
 					foundIdx = donor2.idx;
+					var vm = donor2.vm._update(node2.data, vnode, i);		// withDOM
 				}
 				else
 					{ var vm = createView(node2.view, node2.data, node2.key, node2.opts)._redraw(vnode, i, false); }	// createView, no dom (will be handled by sync below)
@@ -1597,6 +1572,7 @@ function reParent(vm, vold, newParent, newIdx) {
 		newParent.body[newIdx] = vold;
 		vold.idx = newIdx;
 		vold.parent = newParent;
+		vold._lis = false;
 	}
 	return vm;
 }
