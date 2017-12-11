@@ -503,6 +503,10 @@ var DEVMODE = {
 	ALREADY_HYDRATED: function(vm) {
 		return ["A child view failed to mount because it was already hydrated. Make sure not to invoke vm.redraw() or vm.update() on unmounted views.", vm];
 	},
+
+	ATTACH_IMPLICIT_TBODY: function(vnode, vchild) {
+		return ["<table><tr> was detected in the vtree, but the DOM will be <table><tbody><tr> after HTML's implicit parsing. You should create the <tbody> vnode explicitly to avoid SSR/attach() failures.", vnode, vchild];
+	}
 };
 
 function devNotify(key, args) {
@@ -1360,15 +1364,8 @@ function findSeqThorough(n, obody, fromIdx) {		// pre-tested isView?
 	return null;
 }
 
-function findSeqKeyed(n, obody, fromIdx) {
-	for (; fromIdx < obody.length; fromIdx++) {
-		var o = obody[fromIdx];
-
-		if (o.key === n.key)
-			{ return o; }
-	}
-
-	return null;
+function findHashKeyed(n, obody, fromIdx) {
+	return obody[obody._keys[n.key]];
 }
 
 /*
@@ -1456,10 +1453,17 @@ function patchChildren(vnode, donor) {
 		domSync		= !isFixed && vnode.type === ELEMENT,
 		doFind		= true,
 		find		= (
-			isKeyed ? findSeqKeyed :				// keyed lists/lazyLists (falls back to findBinKeyed when > SEQ_FAILS_MAX)
+			isKeyed ? findHashKeyed :				// keyed lists/lazyLists
 			isFixed || isLazy ? takeSeqIndex :		// unkeyed lazyLists and FIXED_BODY
 			findSeqThorough							// more complex stuff
 		);
+
+	if (isKeyed) {
+		var keys = {};
+		for (var i = 0; i < obody.length; i++)
+			{ keys[obody[i].key] = i; }
+		obody._keys = keys;
+	}
 
 	if (domSync && nlen === 0) {
 		clearChildren(donor);
@@ -1561,7 +1565,7 @@ function patchChildren(vnode, donor) {
 		}
 
 		// found donor & during a sequential search ...at search head
-		if (donor2 != null) {
+		if (!isKeyed && donor2 != null) {
 			if (foundIdx === fromIdx) {
 				// advance head
 				fromIdx++;
@@ -2439,7 +2443,7 @@ function attach(vnode, withEl) {
 	if ((vnode.flags & LAZY_LIST) === LAZY_LIST)
 		{ vnode.body.body(vnode); }
 
-	if (isArr(vnode.body)) {
+	if (isArr(vnode.body) && vnode.body.length > 0) {
 		var c = withEl.firstChild;
 		var i = 0;
 		var v = vnode.body[i];
@@ -2448,6 +2452,12 @@ function attach(vnode, withEl) {
 				{ v = createView(v.view, v.data, v.key, v.opts)._redraw(vnode, i, false).node; }
 			else if (v.type === VMODEL)
 				{ v = v.node || v._redraw(vnode, i, false).node; }
+
+			{
+				if (vnode.tag === "table" && v.tag === "tr") {
+					devNotify("ATTACH_IMPLICIT_TBODY", [vnode, v]);
+				}
+			}
 
 			attach(v, c);
 		} while ((c = c.nextSibling) && (v = vnode.body[++i]))
