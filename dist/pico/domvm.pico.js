@@ -1,5 +1,5 @@
 /**
-* Copyright (c) 2017, Leon Sorokin
+* Copyright (c) 2018, Leon Sorokin
 * All rights reserved. (MIT Licensed)
 *
 * domvm.js (DOM ViewModel)
@@ -30,13 +30,11 @@ var ENV_DOM = typeof window !== "undefined";
 var win = ENV_DOM ? window : {};
 var doc = ENV_DOM ? document : {};
 
-
 var rAF = win.requestAnimationFrame;
 
 var emptyObj = {};
 
 function noop() {}
-
 var isArr = Array.isArray;
 
 function isPlainObj(val) {
@@ -60,8 +58,6 @@ function isProm(val) {
 	return typeof val === "object" && isFunc(val.then);
 }
 
-
-
 function assignObj(targ) {
 	var args = arguments;
 
@@ -84,8 +80,6 @@ function deepSet(targ, path, val) {
 			{ targ[seg] = targ = targ[seg] || {}; }
 	}
 }
-
-
 
 function cmpObj(a, b) {
 	for (var i in a)
@@ -316,9 +310,6 @@ function defineText(body) {
 	node.body = body;
 	return node;
 }
-
-// creates a one-shot self-ending stream that redraws target vm
-// TODO: if it's already registered by any parent vm, then ignore to avoid simultaneous parent & child refresh
 
 var tagObj = {};
 
@@ -689,8 +680,6 @@ function config(newCfg) {
 
 	if (newCfg.syncRedraw != null)
 		{ syncRedraw = newCfg.syncRedraw; }
-
-	
 }
 
 function bindEv(el, type, fn) {
@@ -787,7 +776,6 @@ function patchAttrs(vnode, donor, initial) {
 	var oattrs = donor.attrs || emptyObj;
 
 	if (nattrs === oattrs) {
-		
 	}
 	else {
 		for (var key in nattrs) {
@@ -829,7 +817,6 @@ function createView(view, data, key, opts) {
 	return new ViewModel(view, data, key, opts);
 }
 
-//import { XML_NS, XLINK_NS } from './defineSvgElement';
 function hydrateBody(vnode) {
 	for (var i = 0; i < vnode.body.length; i++) {
 		var vnode2 = vnode.body[i];
@@ -905,6 +892,7 @@ function syncDir(advSib, advNode, insert, sibName, nodeName, invSibName, invNode
 		if (state[sibName] != null) {
 			// skip dom elements not created by domvm
 			if ((sibNode = state[sibName]._node) == null) {
+
 				state[sibName] = advSib(state[sibName]);
 				return;
 			}
@@ -935,6 +923,7 @@ function syncDir(advSib, advNode, insert, sibName, nodeName, invSibName, invNode
 			state[invSibName] = tmpSib;
 		}
 		else {
+
 			if (lis && state[sibName] != null)
 				{ return lisMove(advSib, advNode, insert, sibName, nodeName, parEl, body, sibNode, state); }
 
@@ -1001,8 +990,9 @@ function syncChildren(node, donor) {
 
 // TODO: also use the state.rgtSib and state.rgtNode bounds, plus reduce LIS range
 function sortDOM(node, parEl, body, state) {
-	var kids = Array.prototype.slice.call(parEl.childNodes);
 	var domIdxs = [];
+	// compression micro-opt (instead of Array.prototype.slice.call(...);
+	var kids = domIdxs.slice.call(parEl.childNodes);
 
 	for (var k = 0; k < kids.length; k++) {
 		var n = kids[k]._node;
@@ -1304,10 +1294,6 @@ function ViewModel(view, data, key, opts) {
 		vm.config(out);
 	}
 
-	// these must be wrapped here since they're debounced per view
-	vm._redrawAsync = raft(function (_) { return vm.redraw(true); });
-	vm._updateAsync = raft(function (newData) { return vm.update(newData, true); });
-
 	vm.init && vm.init.call(vm, vm, vm.data, vm.key, opts);
 }
 
@@ -1344,8 +1330,6 @@ var ViewModelProto = ViewModel.prototype = {
 		// maybe invert assignment order?
 		if (opts.hooks)
 			{ t.hooks = assignObj(t.hooks || {}, opts.hooks); }
-
-		
 	},
 	parent: function() {
 		return getVm(this.node.parent);
@@ -1363,7 +1347,12 @@ var ViewModelProto = ViewModel.prototype = {
 			{ sync = syncRedraw; }
 
 		var vm = this;
-		sync ? vm._redraw(null, null, isHydrated(vm)) : vm._redrawAsync();
+
+		if (sync)
+			{ vm._redraw(null, null, isHydrated(vm)); }
+		else
+			{ (vm._redrawAsync = vm._redrawAsync || raft(function (_) { return vm.redraw(true); }))(); }
+
 		return vm;
 	},
 	update: function(newData, sync) {
@@ -1371,7 +1360,12 @@ var ViewModelProto = ViewModel.prototype = {
 			{ sync = syncRedraw; }
 
 		var vm = this;
-		sync ? vm._update(newData, null, null, isHydrated(vm)) : vm._updateAsync(newData);
+
+		if (sync)
+			{ vm._update(newData, null, null, isHydrated(vm)); }
+		else
+			{ (vm._updateAsync = vm._updateAsync || raft(function (newData) { return vm.update(newData, true); }))(newData); }
+
 		return vm;
 	},
 
@@ -1525,8 +1519,6 @@ function updateSync(newData, newParent, newIdx, withDOM) {
 		if (vm.data !== newData) {
 			fireHook(vm.hooks, "willUpdate", vm, newData);
 			vm.data = newData;
-
-			
 		}
 	}
 

@@ -366,15 +366,14 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
     if (type == "for") return cont(pushlex("form"), forspec, statement, poplex);
     if (type == "class" || (isTS && value == "interface")) { cx.marked = "keyword"; return cont(pushlex("form"), className, poplex); }
     if (type == "variable") {
-      if (isTS && value == "type") {
-        cx.marked = "keyword"
-        return cont(typeexpr, expect("operator"), typeexpr, expect(";"));
-      } else if (isTS && value == "declare") {
+      if (isTS && value == "declare") {
         cx.marked = "keyword"
         return cont(statement)
-      } else if (isTS && (value == "module" || value == "enum") && cx.stream.match(/^\s*\w/, false)) {
+      } else if (isTS && (value == "module" || value == "enum" || value == "type") && cx.stream.match(/^\s*\w/, false)) {
         cx.marked = "keyword"
-        return cont(pushlex("form"), pattern, expect("{"), pushlex("}"), block, poplex, poplex)
+        if (value == "enum") return cont(enumdef);
+        else if (value == "type") return cont(typeexpr, expect("operator"), typeexpr, expect(";"));
+        else return cont(pushlex("form"), pattern, expect("{"), pushlex("}"), block, poplex, poplex)
       } else if (isTS && value == "namespace") {
         cx.marked = "keyword"
         return cont(pushlex("form"), expression, block, poplex)
@@ -422,6 +421,7 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
     if (type == "{") return contCommasep(objprop, "}", null, maybeop);
     if (type == "quasi") return pass(quasi, maybeop);
     if (type == "new") return cont(maybeTarget(noComma));
+    if (type == "import") return cont(expression);
     return cont();
   }
   function maybeexpression(type) {
@@ -624,7 +624,7 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
   }
   function afterType(type, value) {
     if (value == "<") return cont(pushlex(">"), commasep(typeexpr, ">"), poplex, afterType)
-    if (value == "|" || type == ".") return cont(typeexpr)
+    if (value == "|" || type == "." || value == "&") return cont(typeexpr)
     if (type == "[") return cont(expect("]"), afterType)
     if (value == "extends" || value == "implements") { cx.marked = "keyword"; return cont(typeexpr) }
   }
@@ -637,7 +637,8 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
   function maybeTypeDefault(_, value) {
     if (value == "=") return cont(typeexpr)
   }
-  function vardef() {
+  function vardef(_, value) {
+    if (value == "enum") {cx.marked = "keyword"; return cont(enumdef)}
     return pass(pattern, maybetype, maybeAssign, vardefCont);
   }
   function pattern(type, value) {
@@ -666,7 +667,8 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
   function maybeelse(type, value) {
     if (type == "keyword b" && value == "else") return cont(pushlex("form", "else"), statement, poplex);
   }
-  function forspec(type) {
+  function forspec(type, value) {
+    if (value == "await") return cont(forspec);
     if (type == "(") return cont(pushlex(")"), forspec1, expect(")"), poplex);
   }
   function forspec1(type) {
@@ -709,8 +711,10 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
   }
   function classNameAfter(type, value) {
     if (value == "<") return cont(pushlex(">"), commasep(typeparam, ">"), poplex, classNameAfter)
-    if (value == "extends" || value == "implements" || (isTS && type == ","))
+    if (value == "extends" || value == "implements" || (isTS && type == ",")) {
+      if (value == "implements") cx.marked = "keyword";
       return cont(isTS ? typeexpr : expression, classNameAfter);
+    }
     if (type == "{") return cont(pushlex("}"), classBody, poplex);
   }
   function classBody(type, value) {
@@ -758,6 +762,7 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
   }
   function afterImport(type) {
     if (type == "string") return cont();
+    if (type == "(") return pass(expression);
     return pass(importSpec, maybeMoreImports, maybeFrom);
   }
   function importSpec(type, value) {
@@ -778,6 +783,12 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
   function arrayLiteral(type) {
     if (type == "]") return cont();
     return pass(commasep(expressionNoComma, "]"));
+  }
+  function enumdef() {
+    return pass(pushlex("form"), pattern, expect("{"), pushlex("}"), commasep(enummember, "}"), poplex, poplex)
+  }
+  function enummember() {
+    return pass(pattern, maybeAssign);
   }
 
   function isContinuedStatement(state, textAfter) {

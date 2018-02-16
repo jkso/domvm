@@ -5,7 +5,6 @@ const fs = require('fs');
 const exec = require('child_process').exec;
 const execSync = require('child_process').execSync;
 const zlib = require('zlib');
-const beautify = require('js-beautify').js_beautify;
 const uglify = require("uglify-js").minify;
 
 function getBuilds(name) {
@@ -62,9 +61,9 @@ function getBuilds(name) {
 }
 
 var args = process.argv.slice(2);
-
-if (args.length == 1)
-	compile(args[0]);
+var buildName = args[0];
+builds = buildName == null ? getBuilds().map(b => b.build) : [buildName];
+builds.forEach(b => compile(b));
 
 function getCurBranch() {
 	var branches = execSync("git branch", {encoding: 'utf8'});
@@ -144,16 +143,12 @@ function squish(buildName, start) {
 	var opts = {
 		output: {
 	//		beautify: false,
-			preamble: "// " + /@preserve\s+(.*)$/gm.exec(code)[1] + "\n",
+			preamble: "// " + /@preserve\s+(.*)$/gm.exec(code)[1],
 		}
 	};
 	var result = uglify(code, opts);
 	var compiled = result.code;
-
 	fs.writeFileSync(dst, compiled, 'utf8');
-
-	var dstPretty = "dist/" + buildName + "/domvm." + buildName + ".pretty.js";
-	fs.writeFileSync(dstPretty, beautify(compiled, { indent_size: 2 }), 'utf8');
 
 	buildDistTable();
 
@@ -197,7 +192,6 @@ function buildDistTable() {
 
 		for (var colName in colWidths)
 			colWidths[colName] = Math.max(colWidths[colName], build[colName].length);
-
 	});
 
 	var table = '';
